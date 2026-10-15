@@ -322,25 +322,27 @@ Translate Power Automate expressions into equivalent Python.
 
 Use these mappings where applicable:
 
-| Power Automate           | Python         |
-| ------------------------ | -------------- |
-| `mul(a,b)`             | `a * b`      |
-| `add(a,b)`             | `a + b`      |
-| `sub(a,b)`             | `a - b`      |
-| `div(a,b)`             | `a / b`      |
-| `int(x)`               | `int(x)`     |
-| `float(x)`             | `float(x)`   |
-| `string(x)`            | `str(x)`     |
-| `equals(a,b)`          | `a == b`     |
-| `greater(a,b)`         | `a > b`      |
-| `greaterOrEquals(a,b)` | `a >= b`     |
-| `less(a,b)`            | `a < b`      |
-| `lessOrEquals(a,b)`    | `a <= b`     |
-| `and(a,b)`             | `a and b`    |
-| `or(a,b)`              | `a or b`     |
-| `not(x)`               | `not x`      |
-| `take(array,n)`        | `array[:n]`  |
-| `length(array)`        | `len(array)` |
+| Power Automate           | Python                                                                                                                                                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mul(a,b)`             | `a * b`                                                                                                                                                                                                                         |
+| `add(a,b)`             | `a + b`                                                                                                                                                                                                                         |
+| `sub(a,b)`             | `a - b`                                                                                                                                                                                                                         |
+| `div(a,b)`             | Integer division when both`a` and `b` are integers (truncated result, e.g. `div(5,2)` is `2`); true division (`a / b`) when either is a float. A zero divisor is an error, as in the flow.                              |
+| `int(x)`               | `int(x)`                                                                                                                                                                                                                        |
+| `float(x)`             | `float(x)`                                                                                                                                                                                                                      |
+| `string(x)`            | Type-aware conversion:`null` becomes `""`; strings are unchanged; objects and arrays are serialized with `json.dumps(x)`; booleans become `"true"`/`"false"`; numbers use their plain text form. Do not use `str(x)`. |
+| `equals(a,b)`          | `a == b`                                                                                                                                                                                                                        |
+| `greater(a,b)`         | `a > b`                                                                                                                                                                                                                         |
+| `greaterOrEquals(a,b)` | `a >= b`                                                                                                                                                                                                                        |
+| `less(a,b)`            | `a < b`                                                                                                                                                                                                                         |
+| `lessOrEquals(a,b)`    | `a <= b`                                                                                                                                                                                                                        |
+| `and(a,b)`             | `a and b`                                                                                                                                                                                                                       |
+| `or(a,b)`              | `a or b`                                                                                                                                                                                                                        |
+| `not(x)`               | `not x`                                                                                                                                                                                                                         |
+| `take(array,n)`        | `array[:n]`                                                                                                                                                                                                                     |
+| `length(array)`        | `len(array)`                                                                                                                                                                                                                    |
+
+Use type-aware conversions for `div` and `string` so calculations and connector payloads preserve the source Power Automate behavior.
 
 Also translate:
 
