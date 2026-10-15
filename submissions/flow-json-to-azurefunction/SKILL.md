@@ -2,7 +2,6 @@
 name: flow-json-to-azurefunction
 description: This skill analyzes a Power Automate cloud flow definition provided as JSON and converts the flow logic into a deployable Python Azure Function.
 ---
-
 The skill must:
 
 1. Analyze the complete Power Automate JSON.
@@ -12,7 +11,7 @@ The skill must:
 5. Generate an analysis explaining how the Power Automate flow was converted.
 6. Generate a PDF report containing the analysis and generated Azure Function code.
 7. Generate a complete Azure Function deployment ZIP package.
-8. Return the generated PDF and ZIP as base64 payloads.
+8. Write the generated PDF and ZIP to `/app/created/` and return them as attachments in the same turn (not base64).
 
 The generated Azure Function must implement the actual logic contained in the supplied Power Automate JSON. It must not generate a generic placeholder function.
 
@@ -99,7 +98,7 @@ The generated implementation must replace the sample `hello` function logic with
 If the reference project is not available, generate the standard Azure Functions Python v2 structure:
 
 ```text
-flow2function_<flowname>.zip
+flow2function_<sanitized_flow_name>.zip
 ├── .funcignore
 ├── function_app.py
 ├── host.json
@@ -703,10 +702,24 @@ The PDF must be readable even when the generated code is long.
 File naming convention:
 
 ```text
-flow2function_<flowname>.pdf
+flow2function_<sanitized_flow_name>.pdf
 ```
 
-The filename should be sanitized so that it is safe for filesystem usage.
+Never use the raw flow name directly in a filename. Derive `<sanitized_flow_name>` using the rules below.
+
+## Sanitizing artifact filenames
+
+Apply these deterministic rules to the flow name to produce `<sanitized_flow_name>`:
+
+1. Allow only letters, numbers, `.`, `_`, and `-`.
+2. Replace path separators (`/`, `\`), control characters, quotes, wildcards (`*`, `?`), and any other invalid filename characters with `_`.
+3. Collapse repeated underscores into a single `_`.
+4. Reject the name if it is empty, `.`, or `..`, or if it is a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, with or without an extension). When rejected, fall back to a safe default such as `flow`.
+5. Cap the sanitized name at a fixed maximum length (for example 80 characters) **before** adding the `flow2function_` prefix and the file extension.
+
+Compute `<sanitized_flow_name>` once and reuse it for both the PDF and the ZIP filenames.
+
+Write the PDF and ZIP only to `/app/created/`. Never write to a path built from the raw flow name.
 
 ---
 
@@ -717,7 +730,7 @@ Generate a complete Azure Function deployment ZIP.
 The ZIP must contain:
 
 ```text
-flow2function_<flowname>.zip
+flow2function_<sanitized_flow_name>.zip
 ├── .funcignore
 ├── function_app.py
 ├── host.json
@@ -826,11 +839,9 @@ Do not return `function_app.py` as a separate file attachment unless explicitly 
 
 The PDF must contain the generated code for review.
 
----
+Write both the PDF and the ZIP to `/app/created/`, and return them as attachments in the same turn.
 
-# 22. Output
-
-Return a JSON object containing:
+Return a compact JSON object containing:
 
 ```json
 {
@@ -840,25 +851,18 @@ Return a JSON object containing:
   "connectorsDetected": [],
   "conversionSummary": "...",
   "recommendation": "...",
-  "generatedAzureFunctionCode": "...",
-  "analysis": "...",
-  "pdfBase64": "...",
-  "pdfPath": "...",
-  "zipBase64": "...",
-  "zipPath": "...",
-  "zipFileName": "flow2function_<flowname>.zip",
-  "pdfFileName": "flow2function_<flowname>.pdf",
+  "analysisSummary": "...",
+  "zipFileName": "flow2function_<sanitized_flow_name>.zip",
+  "pdfFileName": "flow2function_<sanitized_flow_name>.pdf",
   "functionAppFileName": "function_app.py"
 }
 ```
 
-`pdfBase64` must always be present.
+Keep the JSON/chat response to compact textual metadata. `analysisSummary` must be a short summary (a few sentences) of what the flow does and how it was converted. Do not include the generated code or the full analysis in the response; the full analysis and the generated code are contained in the PDF and the ZIP.
 
-`zipBase64` must always be present.
+Write both artifacts to `/app/created/` and return them as attachments in the same turn. In Copilot Studio, a file written to `/app/created/` is surfaced as a downloadable attachment. Do not just report that the files were created.
 
-`pdfPath` is present only when `write_to_disk=True`.
-
-`zipPath` is present only when `write_to_disk=True`.
+Do not include `pdfBase64` or `zipBase64`, or any other base64-encoded artifact content, in the response.
 
 `functionAppFileName` must always be:
 
@@ -872,7 +876,9 @@ function_app.py
 
 The generated Azure Function itself should support normal HTTP JSON responses.
 
-If the migration/reporting endpoint is responsible for serving generated artifacts, support:
+In Copilot Studio, artifacts are delivered by writing them to `/app/created/` (see section 22); the endpoint behavior below applies only if a separate custom HTTP endpoint serves the artifacts.
+
+If a custom HTTP endpoint is responsible for serving generated artifacts, support:
 
 ```text
 Accept: application/pdf
@@ -894,7 +900,14 @@ Support:
 
 to return the generated Azure Function ZIP.
 
-If no format is specified, return JSON containing the analysis and both base64 payloads.
+Direct artifact responses must be binary and use these headers:
+
+| Artifact | Content-Type        | Content-Disposition                                                |
+| -------- | ------------------- | ------------------------------------------------------------------ |
+| PDF      | `application/pdf` | `attachment; filename="flow2function_<sanitized_flow_name>.pdf"` |
+| ZIP      | `application/zip` | `attachment; filename="flow2function_<sanitized_flow_name>.zip"` |
+
+If no format is specified, return compact JSON metadata (see section 22) and deliver both the PDF and the ZIP as attachments by writing them to `/app/created/`. Do not embed base64 payloads in the JSON.
 
 ---
 
@@ -922,7 +935,9 @@ If no format is specified, return JSON containing the analysis and both base64 p
 20. Do not silently invent connector implementations.
 21. Clearly identify assumptions and TODOs.
 22. The generated code must be real Python code, not pseudocode.
-23. The generated ZIP must contain the same `function_app.py` code shown in the PDF and response.
+23. The generated ZIP must contain the same `function_app.py` code shown in the PDF.
 24. Do not include `reportlab` in the Azure Function requirements unless the generated Azure Function itself requires it.
 25. The migration process must generate both the analysis report and deployment package.
-26. The final output must contain both `pdfBase64` and `zipBase64`.
+26. The final output must include both the PDF and the ZIP, written to `/app/created/` and returned as attachments in the same turn.
+27. Never use the raw flow name in a PDF or ZIP filename. Always use `<sanitized_flow_name>`.
+28. Never include base64 PDF or ZIP payloads in the model or JSON response.
